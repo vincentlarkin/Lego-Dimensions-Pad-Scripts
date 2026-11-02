@@ -1,3 +1,1 @@
-libusb1
-libusb
-pyusb
+pyusb>=1.2

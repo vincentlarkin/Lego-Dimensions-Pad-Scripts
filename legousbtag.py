@@ -1,8 +1,9 @@
-#!/usr/bin/python
+#!/usr/bin/env python3
+# Lights up a pad on the Lego Dimensions toy pad when a tag is placed on it:
+# red for the tag in uidDarthVader, green for any other tag, off when it's lifted.
 
 import usb.core
 import usb.util
-from time import sleep
 
 TOYPAD_INIT = [0x55, 0x0f, 0xb0, 0x01, 0x28, 0x63, 0x29, 0x20, 0x4c, 0x45, 0x47, 0x4f, 0x20, 0x32, 0x30, 0x31, 0x34, 0xf7, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
 
@@ -30,12 +31,15 @@ def init_usb():
     dev = usb.core.find(idVendor=0x0e6f, idProduct=0x0241)
 
     if dev is None:
-        print 'Device not found'
+        print('Device not found')
     else:
-        if dev.is_kernel_driver_active(0):
-            dev.detach_kernel_driver(0)
+        try:
+            if dev.is_kernel_driver_active(0):
+                dev.detach_kernel_driver(0)
+        except NotImplementedError:
+            pass  # Windows and macOS have no kernel driver to detach
 
-        print usb.util.get_string(dev, dev.iProduct)
+        print(usb.util.get_string(dev, dev.iProduct))
 
         dev.set_configuration()
         dev.write(1,TOYPAD_INIT)
@@ -45,17 +49,11 @@ def init_usb():
 
 def send_command(dev,command):
 
-    # calculate checksum
-    checksum = 0
-    for word in command:
-        checksum = checksum + word
-        if checksum >= 256:
-            checksum -= 256
-        message = command+[checksum]
+    # checksum is the sum of the bytes, kept to one byte
+    message = command + [sum(command) % 256]
 
     # pad message
-    while(len(message) < 32):
-        message.append(0x00)
+    message += [0x00] * (32 - len(message))
 
     # send message
     dev.write(1, message)
@@ -69,19 +67,19 @@ def switch_pad(pad, colour):
 
 
 def uid_compare(uid1, uid2):
-    match = True
-    for i in range(0,7):
-        if (uid1[i] != uid2[i]) :
-            match = False
-    return match 
+    return tuple(uid1) == tuple(uid2)
 
 
 def main():
     init_usb()
-    if dev != None :
-        while True:
-            try:
-                in_packet = dev.read(0x81, 32, timeout = 10)
+    if dev is not None:
+        try:
+            while True:
+                try:
+                    in_packet = dev.read(0x81, 32, timeout = 10)
+                except usb.core.USBTimeoutError:
+                    continue  # nothing happened on the pad
+
                 bytelist = list(in_packet)
 
                 if not bytelist:
@@ -103,13 +101,9 @@ def main():
                     else:
                         # some tag removed
                         switch_pad(pad_num, OFF)
-
-            except usb.USBError, err:
-                pass
-
-        switch_pad(ALL_PADS,OFF)
+        except KeyboardInterrupt:
+            switch_pad(ALL_PADS,OFF)
     return
 
 if __name__ == '__main__':
     main()
-  

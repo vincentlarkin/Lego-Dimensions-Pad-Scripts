@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python3
 
 # A python script to cycle all avalible colors the Lego USB Pad can create.
 import usb.core
@@ -26,12 +26,15 @@ def init_usb():
     dev = usb.core.find(idVendor=0x0e6f, idProduct=0x0241)
 
     if dev is None:
-        print 'Device not found'
+        print('Device not found')
     else:
-        if dev.is_kernel_driver_active(0):
-            dev.detach_kernel_driver(0)
+        try:
+            if dev.is_kernel_driver_active(0):
+                dev.detach_kernel_driver(0)
+        except NotImplementedError:
+            pass  # Windows and macOS have no kernel driver to detach
 
-        print usb.util.get_string(dev, dev.iProduct)
+        print(usb.util.get_string(dev, dev.iProduct))
 
         dev.set_configuration()
         dev.write(1,TOYPAD_INIT)
@@ -40,17 +43,11 @@ def init_usb():
 
 def send_command(dev,command):
 
-    # calculate checksum
-    checksum = 0
-    for word in command:
-        checksum = checksum + word
-        if checksum >= 256:
-            checksum -= 256
-    message = command+[checksum]
+    # checksum is the sum of the bytes, kept to one byte
+    message = command + [sum(command) % 256]
 
     # pad message
-    while(len(message) < 32):
-        message.append(0x00)
+    message += [0x00] * (32 - len(message))
 
     # send message
     dev.write(1, message)
@@ -63,7 +60,8 @@ def switch_pad(pad, colour):
 
 
 def main():
-    init_usb()
+    if init_usb() is None:
+        return
     switch_pad(ALL_PADS,RED)
     sleep(0.5)
     switch_pad(ALL_PADS,GREEN)
